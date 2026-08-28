@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { runAllScrapers } from '../../../lib/scrapers/index';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/listings
  * Returns aggregated card listings from all scrapers
