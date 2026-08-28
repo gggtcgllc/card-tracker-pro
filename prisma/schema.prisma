@@ -1,0 +1,114 @@
+// Database schema for verified card listings
+// This uses Prisma ORM - compatible with PostgreSQL, MySQL, SQLite, and more
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Marketplace Platform Configuration
+model Marketplace {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  url           String
+  category      String
+  verification  String
+  scraperEnabled Boolean @default(true)
+  lastScrapedAt DateTime?
+  listings      CardListing[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([name])
+  @@index([category])
+}
+
+// Main Card Listings Table
+model CardListing {
+  id            String   @id @default(cuid())
+  cardTitle     String
+  price         Float
+  grade         String?
+  source        String   // Marketplace name
+  marketplace   Marketplace @relation(fields: [source], references: [name])
+  saleDate      DateTime
+  verified      Boolean  @default(true)
+  url           String?
+  scraped_at    DateTime @default(now())
+  
+  // For deduplication
+  externalId    String?  @unique // Platform's original ID
+  fingerprint   String   @unique // Hash to detect duplicates
+  
+  // Metadata
+  cardType      String? // TCG, Sports, Vintage, Modern
+  platform      String   // eBay, Heritage, Goldin, etc.
+  
+  // For tracking data freshness
+  isActive      Boolean  @default(true)
+  expiresAt     DateTime? // Remove after 90 days if no new sales
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@unique([externalId, source])
+  @@index([cardTitle])
+  @@index([saleDate])
+  @@index([source])
+  @@index([fingerprint])
+  @@index([isActive])
+  @@index([expiresAt])
+}
+
+// Scraper Job Logs
+model ScraperJob {
+  id            String   @id @default(cuid())
+  marketplace   String   // Platform being scraped
+  status        String   // pending, running, success, failed
+  listingsFound Int      @default(0)
+  listingsAdded Int      @default(0)
+  listingsDuplicate Int @default(0)
+  error         String?
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([marketplace])
+  @@index([status])
+  @@index([startedAt])
+}
+
+// Price History for tracking trends
+model PriceHistory {
+  id            String   @id @default(cuid())
+  cardTitle     String
+  avgPrice      Float
+  medianPrice   Float
+  minPrice      Float
+  maxPrice      Float
+  saleCount     Int
+  dateRange     String   // e.g., "2026-08-28"
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@unique([cardTitle, dateRange])
+  @@index([cardTitle])
+  @@index([dateRange])
+}
+
+// API Usage/Rate Limiting
+model RateLimiter {
+  id            String   @id @default(cuid())
+  marketplace   String   @unique
+  requestCount  Int      @default(0)
+  lastReset     DateTime @default(now())
+  
+  @@index([marketplace])
+}
