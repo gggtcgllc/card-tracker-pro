@@ -1,253 +1,413 @@
 'use client';
 
-import React, { useState } from 'react';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-} from 'recharts';
-import { Search, DollarSign, Layers, ShieldCheck, Activity } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { MarketplaceFilterDropdown, type MarketplaceSource } from '@/components/MarketplaceFilterDropdown';
 
-interface CardItem {
+interface CardListing {
   id: string;
-  name: string;
-  set: string;
-  category: string;
-  grades: { [key: string]: number };
-  popReport: { total: number; psa10: number; gemRate: string };
-  comps: { id: string; date: string; price: number; platform: string; type: string; grade: string }[];
-  history: { date: string; price: number }[];
+  card_title: string;
+  price: number;
+  grade: string | null;
+  source: 'eBay' | 'Goldin' | 'Heritage' | 'Fanatics Collect' | 'Private Sales';
+  sale_date: string;
 }
 
-const DATABASE: CardItem[] = [
-  {
-    id: '1',
-    name: '2013 Pikachu Legendary Treasures Radiant Collection #RC7',
-    set: 'Pokémon Black & White: Legendary Treasures',
-    category: 'TCG',
-    grades: { 'PSA 10': 125, 'PSA 9': 35, 'Raw': 18 },
-    popReport: { total: 2340, psa10: 1120, gemRate: '47.8%' },
-    comps: [
-      { id: 'c1', date: 'Aug 26', price: 127.5, platform: 'eBay', type: 'Auction', grade: 'PSA 10' },
-      { id: 'c2', date: 'Aug 24', price: 115.0, platform: '130point', type: 'Best Offer Accepted', grade: 'PSA 10' },
-      { id: 'c3', date: 'Aug 20', price: 135.0, platform: 'eBay', type: 'Buy It Now', grade: 'PSA 10' },
-      { id: 'c4', date: 'Aug 15', price: 34.0, platform: 'eBay', type: 'Auction', grade: 'PSA 9' },
-    ],
-    history: [
-      { date: 'Jan', price: 95 },
-      { date: 'Mar', price: 105 },
-      { date: 'May', price: 112 },
-      { date: 'Jul', price: 120 },
-      { date: 'Aug', price: 127.5 },
-    ],
-  },
-  {
-    id: '2',
-    name: '2003 Topps Chrome #111 LeBron James Rookie',
-    set: 'Topps Chrome Basketball',
-    category: 'Sports',
-    grades: { 'PSA 10': 4850, 'PSA 9': 1250, 'BGS 9.5': 3100, 'Raw': 420 },
-    popReport: { total: 4210, psa10: 890, gemRate: '21.1%' },
-    comps: [
-      { id: 'c5', date: 'Aug 27', price: 4850, platform: 'eBay', type: 'Auction', grade: 'PSA 10' },
-      { id: 'c6', date: 'Aug 21', price: 1240, platform: 'eBay', type: 'Buy It Now', grade: 'PSA 9' },
-    ],
-    history: [
-      { date: 'Jan', price: 4400 },
-      { date: 'Mar', price: 4600 },
-      { date: 'May', price: 4500 },
-      { date: 'Jul', price: 4750 },
-      { date: 'Aug', price: 4850 },
-    ],
-  },
-  {
-    id: '3',
-    name: '1999 Base Set 1st Edition Shadowless Pikachu #58 (Red Cheeks)',
-    set: 'Pokémon Base Set 1st Edition',
-    category: 'TCG',
-    grades: { 'PSA 10': 850, 'PSA 9': 220, 'Raw': 65 },
-    popReport: { total: 1820, psa10: 410, gemRate: '22.5%' },
-    comps: [
-      { id: 'c7', date: 'Aug 25', price: 840, platform: 'PWCC', type: 'Fixed Price', grade: 'PSA 10' },
-      { id: 'c8', date: 'Aug 22', price: 215, platform: 'eBay', type: 'Best Offer Accepted', grade: 'PSA 9' },
-    ],
-    history: [
-      { date: 'Jan', price: 720 },
-      { date: 'Mar', price: 760 },
-      { date: 'May', price: 800 },
-      { date: 'Jul', price: 825 },
-      { date: 'Aug', price: 850 },
-    ],
-  },
+interface FilterOptions {
+  source: MarketplaceSource;
+  priceRange: [number, number];
+  gradeFilter: string;
+  searchQuery: string;
+}
+
+const REPUTABLE_PLATFORMS = [
+  { name: 'eBay', icon: '🔴', color: 'bg-red-50 border-red-200' },
+  { name: 'Goldin', icon: '⭐', color: 'bg-yellow-50 border-yellow-200' },
+  { name: 'Heritage', icon: '🏛️', color: 'bg-purple-50 border-purple-200' },
+  { name: 'Fanatics Collect', icon: '🎯', color: 'bg-blue-50 border-blue-200' },
+  { name: 'Private Sales', icon: '🤝', color: 'bg-green-50 border-green-200' },
 ];
 
 export default function Home() {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCard, setSelectedCard] = useState<CardItem>(DATABASE[0]);
-  const [activeGrade, setActiveGrade] = useState('PSA 10');
+  const [listings, setListings] = useState<CardListing[]>([]);
+  const [filteredListings, setFilteredListings] = useState<CardListing[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [filters, setFilters] = useState<FilterOptions>({
+    source: 'All',
+    priceRange: [0, 1000000],
+    gradeFilter: 'All',
+    searchQuery: '',
+  });
 
-  const filteredCards = DATABASE.filter((c) =>
-    c.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Simulate real-time data fetching
+  const fetchListings = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Mock data - in production, this would fetch from actual APIs
+      const mockListings: CardListing[] = [
+        {
+          id: 'ebay-001',
+          card_title: '1952 Mickey Mantle Topps #311',
+          price: 45000,
+          grade: 'PSA 9',
+          source: 'eBay',
+          sale_date: '2026-08-28',
+        },
+        {
+          id: 'goldin-001',
+          card_title: '1909-11 T206 Honus Wagner',
+          price: 280000,
+          grade: 'PSA 3',
+          source: 'Goldin',
+          sale_date: '2026-08-27',
+        },
+        {
+          id: 'heritage-001',
+          card_title: '1952 Mickey Mantle Topps #311',
+          price: 48500,
+          grade: 'PSA 8.5',
+          source: 'Heritage',
+          sale_date: '2026-08-28',
+        },
+        {
+          id: 'fanatics-001',
+          card_title: 'Patrick Mahomes 2017 Panini Prizm Rookie',
+          price: 2500,
+          grade: 'BGS 9.5',
+          source: 'Fanatics Collect',
+          sale_date: '2026-08-28',
+        },
+        {
+          id: 'private-001',
+          card_title: 'LeBron James 2003 Topps Rookie',
+          price: 18000,
+          grade: 'PSA 8',
+          source: 'Private Sales',
+          sale_date: '2026-08-26',
+        },
+        {
+          id: 'ebay-002',
+          card_title: 'Lionel Messi Soccer Card Rare Edition',
+          price: 8500,
+          grade: 'Mint',
+          source: 'eBay',
+          sale_date: '2026-08-28',
+        },
+        {
+          id: 'heritage-002',
+          card_title: 'Babe Ruth 1933 Goudey #181',
+          price: 125000,
+          grade: 'PSA 7',
+          source: 'Heritage',
+          sale_date: '2026-08-27',
+        },
+        {
+          id: 'goldin-002',
+          card_title: 'Tom Brady 2000 Playoff Contenders Rookie',
+          price: 9500,
+          grade: 'PSA 8.5',
+          source: 'Goldin',
+          sale_date: '2026-08-28',
+        },
+      ];
 
-  const currentEstimatedPrice =
-    selectedCard.grades[activeGrade] ||
-    Object.values(selectedCard.grades)[0] ||
-    0;
+      setListings(mockListings);
+      setLastUpdated(new Date());
+    } catch (error) {
+      console.error('Failed to fetch listings:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Apply filters
+  useEffect(() => {
+    let filtered = [...listings];
+
+    // Source filter
+    if (filters.source !== 'All') {
+      filtered = filtered.filter((item) => item.source === filters.source);
+    }
+
+    // Price range filter
+    filtered = filtered.filter(
+      (item) => item.price >= filters.priceRange[0] && item.price <= filters.priceRange[1]
+    );
+
+    // Grade filter
+    if (filters.gradeFilter !== 'All' && filters.gradeFilter !== '') {
+      filtered = filtered.filter((item) =>
+        item.grade?.toUpperCase().includes(filters.gradeFilter.toUpperCase())
+      );
+    }
+
+    // Search query
+    if (filters.searchQuery) {
+      filtered = filtered.filter((item) =>
+        item.card_title.toLowerCase().includes(filters.searchQuery.toLowerCase())
+      );
+    }
+
+    // Sort by price descending
+    filtered.sort((a, b) => b.price - a.price);
+
+    setFilteredListings(filtered);
+  }, [listings, filters]);
+
+  // Initial fetch
+  useEffect(() => {
+    fetchListings();
+
+    // Simulate real-time updates every 10 seconds
+    const interval = setInterval(fetchListings, 10000);
+    return () => clearInterval(interval);
+  }, [fetchListings]);
+
+  const getPlatformInfo = (source: string) => {
+    return REPUTABLE_PLATFORMS.find((p) => p.name === source);
+  };
+
+  const formatPrice = (price: number): string => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0,
+    }).format(price);
+  };
+
+  const formatDate = (dateString: string): string => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = now.getTime() - date.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
 
   return (
-    <div className="min-h-screen bg-slate-950 p-4 sm:p-8">
-      <div className="max-w-6xl mx-auto space-y-6">
-        {/* Header */}
-        <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 pb-5">
-          <div>
-            <h1 className="text-2xl font-black bg-gradient-to-r from-emerald-400 to-teal-200 bg-clip-text text-transparent flex items-center gap-2">
-              <Activity className="text-emerald-400" size={24} />
-              CARD TRACKER PRO
-            </h1>
-            <p className="text-xs text-slate-400 mt-0.5">Real-Time Secondary Market Comps & Pop Reports</p>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-950/50 border border-emerald-800/60 px-3 py-1.5 rounded-full">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            Marketplace Feed Online
-          </div>
-        </header>
-
-        {/* Search Bar */}
-        <div className="relative">
-          <Search className="absolute left-3.5 top-3.5 text-slate-500" size={18} />
-          <input
-            type="text"
-            placeholder="Search by player, card #, or set name..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-          />
-        </div>
-
-        {/* Matching Cards Dropdown */}
-        {searchTerm && (
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-2 space-y-1">
-            {filteredCards.map((card) => (
+    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
+      {/* Header */}
+      <header className="sticky top-0 z-40 backdrop-blur-md bg-white/80 border-b border-slate-200 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                Card Market Tracker
+              </h1>
+              <p className="text-sm text-slate-500 mt-1">Real-time comps from all major platforms</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <p className="text-xs text-slate-500">Last updated</p>
+                <p className="text-sm font-medium text-slate-700">
+                  {lastUpdated ? lastUpdated.toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  }) : 'Loading...'}
+                </p>
+              </div>
               <button
-                key={card.id}
-                onClick={() => {
-                  setSelectedCard(card);
-                  setSearchTerm('');
-                }}
-                className="w-full text-left px-3 py-2 text-xs rounded-lg hover:bg-slate-800 text-slate-300 flex justify-between items-center"
+                onClick={fetchListings}
+                disabled={loading}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
+                title="Refresh listings"
               >
-                <span>{card.name}</span>
-                <span className="text-emerald-400 font-bold">${card.grades['PSA 10'] || card.grades['Raw']}</span>
+                <svg
+                  className={`w-5 h-5 text-slate-600 ${loading ? 'animate-spin' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
               </button>
-            ))}
-          </div>
-        )}
-
-        {/* Top Metric Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
-            <div className="text-xs text-slate-400 font-medium flex items-center gap-1.5">
-              <DollarSign size={14} className="text-emerald-400" /> Estimated Value ({activeGrade})
-            </div>
-            <div className="text-2xl font-extrabold text-white mt-1">${currentEstimatedPrice.toLocaleString()}</div>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
-            <div className="text-xs text-slate-400 font-medium flex items-center gap-1.5">
-              <ShieldCheck size={14} className="text-emerald-400" /> PSA 10 Population
-            </div>
-            <div className="text-2xl font-extrabold text-emerald-400 mt-1">
-              {selectedCard.popReport.psa10.toLocaleString()}
-              <span className="text-xs text-slate-500 font-normal ml-2">({selectedCard.popReport.gemRate} Gem Rate)</span>
             </div>
           </div>
+        </div>
+      </header>
 
-          <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
-            <div className="text-xs text-slate-400 font-medium flex items-center gap-1.5">
-              <Layers size={14} className="text-emerald-400" /> Total Graded Pop
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Filter Section */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8">
+          <h2 className="text-lg font-semibold text-slate-900 mb-4">Filter & Search</h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Source Filter */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Marketplace</label>
+              <MarketplaceFilterDropdown
+                selectedSource={filters.source}
+                onSourceChange={(source) => setFilters({ ...filters, source })}
+                className="w-full"
+              />
             </div>
-            <div className="text-2xl font-extrabold text-white mt-1">
-              {selectedCard.popReport.total.toLocaleString()}
+
+            {/* Search */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Search Card</label>
+              <input
+                type="text"
+                placeholder="e.g., Mickey Mantle, Jordan..."
+                value={filters.searchQuery}
+                onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              />
+            </div>
+
+            {/* Grade Filter */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Grade</label>
+              <select
+                value={filters.gradeFilter}
+                onChange={(e) => setFilters({ ...filters, gradeFilter: e.target.value })}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              >
+                <option value="All">All Grades</option>
+                <option value="PSA">PSA</option>
+                <option value="BGS">BGS</option>
+                <option value="SGC">SGC</option>
+                <option value="Mint">Mint</option>
+              </select>
+            </div>
+
+            {/* Price Range */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Max Price</label>
+              <input
+                type="number"
+                placeholder="e.g., 50000"
+                value={filters.priceRange[1] === 1000000 ? '' : filters.priceRange[1]}
+                onChange={(e) =>
+                  setFilters({
+                    ...filters,
+                    priceRange: [0, e.target.value ? parseInt(e.target.value) : 1000000],
+                  })
+                }
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              />
             </div>
           </div>
         </div>
 
-        {/* Chart + Comps Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-              <div>
-                <h2 className="text-sm font-bold text-slate-200">{selectedCard.name}</h2>
-                <p className="text-xs text-slate-400">{selectedCard.set}</p>
+        {/* Stats Bar */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+          {REPUTABLE_PLATFORMS.map((platform) => {
+            const count = listings.filter((l) => l.source === platform.name).length;
+            return (
+              <div key={platform.name} className={`${platform.color} rounded-lg border p-4 text-center`}>
+                <div className="text-2xl mb-1">{platform.icon}</div>
+                <p className="text-sm font-medium text-slate-700">{platform.name}</p>
+                <p className="text-lg font-bold text-slate-900">{count}</p>
               </div>
+            );
+          })}
+        </div>
 
-              <div className="flex gap-1.5">
-                {Object.keys(selectedCard.grades).map((grade) => (
-                  <button
-                    key={grade}
-                    onClick={() => setActiveGrade(grade)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
-                      activeGrade === grade
-                        ? 'bg-emerald-500 text-slate-950'
-                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                    }`}
+        {/* Results */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-slate-900">
+              Comparable Sales ({filteredListings.length})
+            </h2>
+            <button
+              onClick={() => setFilters({
+                source: 'All',
+                priceRange: [0, 1000000],
+                gradeFilter: 'All',
+                searchQuery: '',
+              })}
+              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+            >
+              Clear Filters
+            </button>
+          </div>
+
+          {loading ? (
+            <div className="flex justify-center items-center h-96">
+              <div className="text-center">
+                <div className="inline-block w-12 h-12 rounded-full border-4 border-slate-200 border-t-blue-600 animate-spin mb-4"></div>
+                <p className="text-slate-600 font-medium">Loading market data...</p>
+              </div>
+            </div>
+          ) : filteredListings.length > 0 ? (
+            <div className="grid gap-4">
+              {filteredListings.map((listing) => {
+                const platform = getPlatformInfo(listing.source);
+                return (
+                  <div
+                    key={listing.id}
+                    className="bg-white rounded-lg border border-slate-200 hover:border-slate-300 hover:shadow-md transition-all p-4 flex items-center justify-between gap-4"
                   >
-                    {grade}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="h-64 pt-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={selectedCard.history}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 11 }} />
-                  <YAxis stroke="#64748b" tick={{ fontSize: 11 }} domain={['auto', 'auto']} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#020617',
-                      borderColor: '#334155',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                    }}
-                  />
-                  <Line type="monotone" dataKey="price" stroke="#10b981" strokeWidth={2.5} dot={{ r: 4 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-3">
-            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-between justify-between">
-              <span>Verified Sales Comps</span>
-              <span className="text-[10px] text-slate-500 font-normal">130point & eBay</span>
-            </h3>
-
-            <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
-              {selectedCard.comps.map((comp) => (
-                <div key={comp.id} className="p-3 bg-slate-950/70 border border-slate-800 rounded-lg text-xs">
-                  <div className="flex justify-between items-center font-bold">
-                    <span className="text-emerald-400 text-sm">${comp.price.toFixed(2)}</span>
-                    <span className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-300 border border-slate-700">
-                      {comp.grade}
-                    </span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        {platform && <span className="text-2xl">{platform.icon}</span>}
+                        <h3 className="text-lg font-semibold text-slate-900 line-clamp-2">
+                          {listing.card_title}
+                        </h3>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className="inline-block px-2 py-1 bg-slate-100 text-slate-700 text-xs font-medium rounded">
+                          {listing.source}
+                        </span>
+                        {listing.grade && (
+                          <span className="inline-block px-2 py-1 bg-amber-100 text-amber-800 text-xs font-medium rounded">
+                            {listing.grade}
+                          </span>
+                        )}
+                        <span className="text-xs text-slate-500">{formatDate(listing.sale_date)}</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-slate-900">{formatPrice(listing.price)}</p>
+                      <a
+                        href="#"
+                        className="text-xs text-blue-600 hover:text-blue-700 font-medium mt-1 inline-block"
+                      >
+                        View Details →
+                      </a>
+                    </div>
                   </div>
-                  <div className="flex justify-between text-[11px] text-slate-400 mt-1.5">
-                    <span>{comp.platform} • {comp.type}</span>
-                    <span>{comp.date}</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
-          </div>
+          ) : (
+            <div className="text-center py-16 bg-white rounded-lg border border-slate-200">
+              <svg
+                className="w-16 h-16 text-slate-300 mx-auto mb-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              <p className="text-slate-600 font-medium">No listings found matching your filters</p>
+              <p className="text-sm text-slate-500 mt-1">Try adjusting your search criteria</p>
+            </div>
+          )}
         </div>
       </div>
-    </div>
+
+      {/* Footer */}
+      <footer className="border-t border-slate-200 bg-white/50 backdrop-blur-sm mt-16 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-sm text-slate-600">
+          <p>Real-time data from eBay, Goldin Auctions, Heritage Auctions, Fanatics Collect & Private Sales</p>
+          <p className="mt-2 text-xs text-slate-500">Last updated: {lastUpdated?.toLocaleString()}</p>
+        </div>
+      </footer>
+    </main>
   );
 }
