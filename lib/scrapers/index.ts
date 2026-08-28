@@ -27,32 +27,55 @@ export interface CardListing {
   verified: boolean;
 }
 
+function mapListing(listing: {
+  id: string;
+  title: string;
+  price: number;
+  grade?: string;
+  saleDate: string;
+  url: string;
+  source?: string;
+}, fallbackSource: string): CardListing {
+  return {
+    id: listing.id,
+    cardTitle: listing.title,
+    price: listing.price,
+    grade: listing.grade || null,
+    source: listing.source || fallbackSource,
+    saleDate: listing.saleDate,
+    url: listing.url,
+    verified: true,
+  };
+}
+
 /**
  * Run all scrapers and aggregate results
  */
 export async function runAllScrapers(): Promise<CardListing[]> {
   console.log('Starting all marketplace scrapers...');
-  
-  const results = await Promise.allSettled([
-    scrapeEbay(),
-    scrapeHeritage(),
-    scrapeGoldin(),
-    scrapePWCC(),
-    scrapePWCCMarketplace(),
-    scrapeMercari(),
-    scrapeCOMC(),
-    scrape130Point(),
-    scrapeSportlots(),
-    scrapeTCGPlayer(),
-    scrapeCardmarket(),
-    scrapeWhatnot(),
-    scrapeFanatics(),
-    scrapePSAOfficial(),
-    scrapeSGCOfficial(),
-    scrapeBGSOfficial(),
-    scrapeCardLadder(),
-    scrapePriceCharting(),
-  ]);
+
+  const scrapers: Array<{ fn: () => Promise<any[]>; fallbackSource: string }> = [
+    { fn: scrapeEbay, fallbackSource: 'eBay' },
+    { fn: scrapeHeritage, fallbackSource: 'Heritage Auctions' },
+    { fn: scrapeGoldin, fallbackSource: 'Goldin Auctions' },
+    { fn: scrapePWCC, fallbackSource: 'PWCC Auctions' },
+    { fn: scrapePWCCMarketplace, fallbackSource: 'PWCC Marketplace' },
+    { fn: scrapeMercari, fallbackSource: 'Mercari' },
+    { fn: scrapeCOMC, fallbackSource: 'COMC' },
+    { fn: scrape130Point, fallbackSource: '130Point' },
+    { fn: scrapeSportlots, fallbackSource: 'Sportlots' },
+    { fn: scrapeTCGPlayer, fallbackSource: 'TCGPlayer' },
+    { fn: scrapeCardmarket, fallbackSource: 'Cardmarket' },
+    { fn: scrapeWhatnot, fallbackSource: 'Whatnot' },
+    { fn: scrapeFanatics, fallbackSource: 'Fanatics Collect' },
+    { fn: scrapePSAOfficial, fallbackSource: 'PSA Official (eBay)' },
+    { fn: scrapeSGCOfficial, fallbackSource: 'SGC Official (eBay)' },
+    { fn: scrapeBGSOfficial, fallbackSource: 'BGS Official (eBay)' },
+    { fn: scrapeCardLadder, fallbackSource: 'Card Ladder' },
+    { fn: scrapePriceCharting, fallbackSource: 'PriceCharting' },
+  ];
+
+  const results = await Promise.allSettled(scrapers.map((s) => s.fn()));
 
   const allListings: CardListing[] = [];
   let successCount = 0;
@@ -61,22 +84,12 @@ export async function runAllScrapers(): Promise<CardListing[]> {
   results.forEach((result, index) => {
     if (result.status === 'fulfilled') {
       successCount++;
-      // Transform and add to listings
       result.value.forEach((listing: any) => {
-        allListings.push({
-          id: listing.id,
-          cardTitle: listing.title,
-          price: listing.price,
-          grade: listing.grade || null,
-          source: listing.source || 'Unknown',
-          saleDate: listing.saleDate,
-          url: listing.url,
-          verified: true,
-        });
+        allListings.push(mapListing(listing, scrapers[index].fallbackSource));
       });
     } else {
       failureCount++;
-      console.error(`Scraper ${index} failed:`, result.reason);
+      console.error(`Scraper ${scrapers[index].fallbackSource} failed:`, result.reason);
     }
   });
 
@@ -94,39 +107,41 @@ export async function runSingleScraper(marketplaceId: string): Promise<CardListi
 
   switch (marketplaceId) {
     case 'ebay':
-      return (await scrapeEbay()).map(listing => ({
-        id: listing.id,
-        cardTitle: listing.title,
-        price: listing.price,
-        grade: listing.grade || null,
-        source: 'eBay',
-        saleDate: listing.saleDate,
-        url: listing.url,
-        verified: true,
-      }));
+      return (await scrapeEbay()).map((l) => mapListing(l, 'eBay'));
     case 'heritage':
-      return (await scrapeHeritage()).map(listing => ({
-        id: listing.id,
-        cardTitle: listing.title,
-        price: listing.price,
-        grade: listing.grade || null,
-        source: 'Heritage Auctions',
-        saleDate: listing.saleDate,
-        url: listing.url,
-        verified: true,
-      }));
+      return (await scrapeHeritage()).map((l) => mapListing(l, 'Heritage Auctions'));
     case 'goldin':
-      return (await scrapeGoldin()).map(listing => ({
-        id: listing.id,
-        cardTitle: listing.title,
-        price: listing.price,
-        grade: listing.grade || null,
-        source: 'Goldin Auctions',
-        saleDate: listing.saleDate,
-        url: listing.url,
-        verified: true,
-      }));
-    // ... add cases for all other scrapers
+      return (await scrapeGoldin()).map((l) => mapListing(l, 'Goldin Auctions'));
+    case 'pwcc':
+      return (await scrapePWCC()).map((l) => mapListing(l, 'PWCC Auctions'));
+    case 'pwcc-marketplace':
+      return (await scrapePWCCMarketplace()).map((l) => mapListing(l, 'PWCC Marketplace'));
+    case 'mercari':
+      return (await scrapeMercari()).map((l) => mapListing(l, 'Mercari'));
+    case 'comc':
+      return (await scrapeCOMC()).map((l) => mapListing(l, 'COMC'));
+    case '130point':
+      return (await scrape130Point()).map((l) => mapListing(l, '130Point'));
+    case 'sportlots':
+      return (await scrapeSportlots()).map((l) => mapListing(l, 'Sportlots'));
+    case 'tcgplayer':
+      return (await scrapeTCGPlayer()).map((l) => mapListing(l, 'TCGPlayer'));
+    case 'cardmarket':
+      return (await scrapeCardmarket()).map((l) => mapListing(l, 'Cardmarket'));
+    case 'whatnot':
+      return (await scrapeWhatnot()).map((l) => mapListing(l, 'Whatnot'));
+    case 'fanatics':
+      return (await scrapeFanatics()).map((l) => mapListing(l, 'Fanatics Collect'));
+    case 'psa-official':
+      return (await scrapePSAOfficial()).map((l) => mapListing(l, 'PSA Official (eBay)'));
+    case 'sgc-official':
+      return (await scrapeSGCOfficial()).map((l) => mapListing(l, 'SGC Official (eBay)'));
+    case 'bgs-official':
+      return (await scrapeBGSOfficial()).map((l) => mapListing(l, 'BGS Official (eBay)'));
+    case 'card-ladder':
+      return (await scrapeCardLadder()).map((l) => mapListing(l, 'Card Ladder'));
+    case 'price-charting':
+      return (await scrapePriceCharting()).map((l) => mapListing(l, 'PriceCharting'));
     default:
       console.warn(`Unknown marketplace: ${marketplaceId}`);
       return [];

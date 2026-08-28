@@ -1,5 +1,6 @@
 // lib/scrapers/ebay.ts
-import axios from 'axios';
+// Production: use eBay Browse API (https://developer.ebay.com/api-docs/buy/browse/overview.html)
+import { EBAY_LISTINGS } from '../data/sample-listings';
 
 export interface EbayListing {
   id: string;
@@ -8,15 +9,12 @@ export interface EbayListing {
   grade?: string;
   saleDate: string;
   url: string;
+  source: string;
 }
 
 export async function scrapeEbay(): Promise<EbayListing[]> {
   try {
-    // Note: eBay has official API - in production use eBay API directly
-    // For now, this is a placeholder that would use Puppeteer for sold listings
-    const listings: EbayListing[] = [];
-    // TODO: Implement eBay API integration
-    return listings;
+    return EBAY_LISTINGS;
   } catch (error) {
     console.error('eBay scraper error:', error);
     return [];
