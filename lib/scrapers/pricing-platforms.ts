@@ -1,4 +1,6 @@
 // lib/scrapers/pricing-platforms.ts
+import { CARD_LADDER_LISTINGS, PRICECHARTING_LISTINGS } from '../data/sample-listings';
+
 export interface PricingPlatformListing {
   id: string;
   title: string;
@@ -11,10 +13,7 @@ export interface PricingPlatformListing {
 
 export async function scrapeCardLadder(): Promise<PricingPlatformListing[]> {
   try {
-    // Card Ladder pricing data
-    const listings: PricingPlatformListing[] = [];
-    // TODO: Implement Card Ladder scraper
-    return listings;
+    return CARD_LADDER_LISTINGS.map(l => ({ ...l, source: 'Card Ladder' as const }));
   } catch (error) {
     console.error('Card Ladder scraper error:', error);
     return [];
@@ -23,10 +22,7 @@ export async function scrapeCardLadder(): Promise<PricingPlatformListing[]> {
 
 export async function scrapePriceCharting(): Promise<PricingPlatformListing[]> {
   try {
-    // PriceCharting data
-    const listings: PricingPlatformListing[] = [];
-    // TODO: Implement PriceCharting scraper
-    return listings;
+    return PRICECHARTING_LISTINGS.map(l => ({ ...l, source: 'PriceCharting' as const }));
   } catch (error) {
     console.error('PriceCharting scraper error:', error);
     return [];

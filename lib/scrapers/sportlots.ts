@@ -1,4 +1,6 @@
 // lib/scrapers/sportlots.ts
+import { SPORTLOTS_LISTINGS } from '../data/sample-listings';
+
 export interface SportlotsListing {
   id: string;
   title: string;
@@ -11,20 +13,7 @@ export interface SportlotsListing {
 
 export async function scrapeSportlots(): Promise<SportlotsListing[]> {
   try {
-    // Sportlots - sportlots.com
-    // Production: scrape Sportlots completed sales
-    const listings: SportlotsListing[] = [
-      {
-        id: 'sportlots-sl11001',
-        title: 'Cal Ripken Jr. 1982 Topps Traded Rookie',
-        price: 320,
-        grade: 'PSA 8',
-        saleDate: new Date().toISOString().split('T')[0],
-        url: 'https://www.sportlots.com/inven/dealpage.tpl?deal=sl11001',
-        source: 'Sportlots',
-      },
-    ];
-    return listings;
+    return SPORTLOTS_LISTINGS;
   } catch (error) {
     console.error('Sportlots scraper error:', error);
     return [];
