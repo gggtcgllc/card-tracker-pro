@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { MarketplaceFilterDropdown, type MarketplaceSource } from '@/components/MarketplaceFilterDropdown';
+import MarketplaceFilterDropdown, { type MarketplaceSource } from '../components/MarketplaceFilterDropdown';
 
 interface CardListing {
   id: string;
