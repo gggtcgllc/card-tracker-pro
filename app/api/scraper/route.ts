@@ -1,21 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // COMPREHENSIVE list of ALL reputable card marketplaces worldwide
-export interface NormalizedCardListing {
+interface NormalizedCardListing {
   id: string;
   card_title: string;
   price: number;
   grade: string | null;
-  source: string; // Platform name
-  sale_date: string; // ISO 8601 format (YYYY-MM-DD)
-  verified: boolean; // Always true - sourced directly from platform
-  marketplace: string; // Full marketplace name
-  url?: string; // Link to original listing for verification
-  scraped_at?: string; // When data was scraped
+  source: string;
+  sale_date: string;
+  verified: boolean;
+  marketplace: string;
+  url?: string;
+  scraped_at?: string;
 }
 
 // COMPLETE Scraper configuration for ALL reputable platforms
-export const REPUTABLE_PLATFORMS = [
+const REPUTABLE_PLATFORMS = [
   // ===== PREMIUM AUCTION HOUSES =====
   {
     id: 'heritage',
