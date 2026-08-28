@@ -164,19 +164,22 @@ async function tryHtmlScrape(page = 1): Promise<HeritageListing[]> {
 }
 
 /**
- * Scrape Heritage Auctions sports card realized prices.
- * Tries the JSON API first, falls back to HTML scraping, then sample data.
+ * Scrape ALL Heritage Auctions sports card realized prices — every page, no cap.
+ * Tries JSON API first (fastest), falls back to HTML scraping, then sample data.
+ * Stops pagination only when the site returns a partial page (last page) or errors.
  */
-export async function scrapeHeritage(maxPages = 3): Promise<HeritageListing[]> {
+export async function scrapeHeritage(): Promise<HeritageListing[]> {
   const allResults: HeritageListing[] = [];
 
   // Strategy 1: JSON endpoint (clean data, preferred)
-  for (let page = 1; page <= maxPages; page++) {
+  let page = 1;
+  while (true) {
     try {
       const pageResults = await tryJsonEndpoint(page);
       allResults.push(...pageResults);
       if (pageResults.length < 40) break; // last page
-      if (page < maxPages) await new Promise(r => setTimeout(r, 1000 + Math.random() * 500));
+      page++;
+      await new Promise(r => setTimeout(r, 1000 + Math.random() * 500));
     } catch (err) {
       console.warn(`[heritage] JSON endpoint page ${page} failed:`, (err as Error).message);
       break;
@@ -188,14 +191,16 @@ export async function scrapeHeritage(maxPages = 3): Promise<HeritageListing[]> {
     return dedupe(allResults, r => r.id);
   }
 
-  // Strategy 2: HTML scraping fallback
+  // Strategy 2: HTML scraping fallback — paginate until done
   console.log('[heritage] Trying HTML scraping...');
-  for (let page = 1; page <= maxPages; page++) {
+  page = 1;
+  while (true) {
     try {
       const pageResults = await tryHtmlScrape(page);
       allResults.push(...pageResults);
-      if (pageResults.length < 20) break;
-      if (page < maxPages) await new Promise(r => setTimeout(r, 1500 + Math.random() * 1000));
+      if (pageResults.length < 20) break; // last page
+      page++;
+      await new Promise(r => setTimeout(r, 1500 + Math.random() * 1000));
     } catch (err) {
       console.warn(`[heritage] HTML page ${page} failed:`, (err as Error).message);
       break;

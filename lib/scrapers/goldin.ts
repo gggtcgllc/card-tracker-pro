@@ -113,34 +113,27 @@ async function fetchGoldinPage(page = 1): Promise<GoldinListing[]> {
 }
 
 /**
- * Scrape Goldin Auctions sold results.
- * Fetches up to `maxPages` pages (default 5 ≈ 120 lots).
- * Falls back to sample data if all requests fail.
+ * Scrape ALL Goldin Auctions sold results — every page, no cap.
+ * Stops only when the site returns a partial page (signals last page)
+ * or a request fails. Falls back to sample data only if page 1 fails.
  */
-export async function scrapeGoldin(maxPages = 5): Promise<GoldinListing[]> {
+export async function scrapeGoldin(): Promise<GoldinListing[]> {
   const allResults: GoldinListing[] = [];
+  let page = 1;
   let pagesSucceeded = 0;
 
-  for (let page = 1; page <= maxPages; page++) {
+  while (true) {
     try {
       const pageResults = await fetchGoldinPage(page);
       allResults.push(...pageResults);
       pagesSucceeded++;
 
-      // Polite delay between pages
-      if (page < maxPages) {
-        await new Promise(r => setTimeout(r, 1200 + Math.random() * 800));
-      }
+      if (pageResults.length < 20) break; // last page
 
-      // Stop early if we got fewer results than a full page (last page)
-      if (pageResults.length < 20) break;
+      page++;
+      await new Promise(r => setTimeout(r, 1200 + Math.random() * 800));
     } catch (err) {
       console.warn(`[goldin] Page ${page} failed:`, (err as Error).message);
-      if (pagesSucceeded === 0 && page === maxPages) {
-        // All pages failed — use sample data
-        console.warn('[goldin] All pages failed, falling back to sample data');
-        return GOLDIN_LISTINGS as GoldinListing[];
-      }
       break;
     }
   }

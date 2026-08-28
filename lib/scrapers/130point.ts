@@ -1,5 +1,5 @@
 // lib/scrapers/130point.ts
-import { POINT130_LISTINGS } from '../data/sample-listings';
+import { PT130_LISTINGS } from '../data/sample-listings';
 
 export interface Point130Listing {
   id: string;
@@ -13,7 +13,7 @@ export interface Point130Listing {
 
 export async function scrape130Point(): Promise<Point130Listing[]> {
   try {
-    return POINT130_LISTINGS;
+    return PT130_LISTINGS;
   } catch (error) {
     console.error('130Point scraper error:', error);
     return [];

@@ -214,19 +214,22 @@ async function tryHtmlScrape(): Promise<FanaticsListing[]> {
 }
 
 /**
- * Scrape Fanatics Collect sold listings.
+ * Scrape ALL Fanatics Collect sold listings — every page, no cap.
  * Tries REST API → GraphQL → HTML scraping → sample data fallback.
+ * Pagination stops when the site returns a partial page or errors out.
  */
-export async function scrapeFanatics(maxPages = 3): Promise<FanaticsListing[]> {
+export async function scrapeFanatics(): Promise<FanaticsListing[]> {
   const allResults: FanaticsListing[] = [];
 
-  // Strategy 1: REST API
-  for (let page = 1; page <= maxPages; page++) {
+  // Strategy 1: REST API — paginate until done
+  let page = 1;
+  while (true) {
     try {
       const pageResults = await tryRestApi(page);
       allResults.push(...pageResults);
-      if (pageResults.length < 40) break;
-      if (page < maxPages) await new Promise(r => setTimeout(r, 800 + Math.random() * 400));
+      if (pageResults.length < 40) break; // last page
+      page++;
+      await new Promise(r => setTimeout(r, 800 + Math.random() * 400));
     } catch (err) {
       console.warn(`[fanatics] REST API page ${page} failed:`, (err as Error).message);
       break;
@@ -238,14 +241,16 @@ export async function scrapeFanatics(maxPages = 3): Promise<FanaticsListing[]> {
     return dedupe(allResults, r => r.id);
   }
 
-  // Strategy 2: GraphQL
+  // Strategy 2: GraphQL — paginate until done
   console.log('[fanatics] Trying GraphQL...');
-  for (let page = 1; page <= maxPages; page++) {
+  page = 1;
+  while (true) {
     try {
       const pageResults = await tryGraphQL(page);
       allResults.push(...pageResults);
       if (pageResults.length < 40) break;
-      if (page < maxPages) await new Promise(r => setTimeout(r, 800 + Math.random() * 400));
+      page++;
+      await new Promise(r => setTimeout(r, 800 + Math.random() * 400));
     } catch (err) {
       console.warn(`[fanatics] GraphQL page ${page} failed:`, (err as Error).message);
       break;
@@ -257,7 +262,7 @@ export async function scrapeFanatics(maxPages = 3): Promise<FanaticsListing[]> {
     return dedupe(allResults, r => r.id);
   }
 
-  // Strategy 3: HTML scraping
+  // Strategy 3: HTML scraping (single page — Fanatics SPA only shows current page)
   console.log('[fanatics] Trying HTML scraping...');
   try {
     const htmlResults = await tryHtmlScrape();
