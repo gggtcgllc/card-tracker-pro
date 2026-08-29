@@ -3,6 +3,15 @@
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
+  "git": {
+    "deploymentEnabled": {
+      "main": true
+    }
+  },
+  "github": {
+    "enabled": true,
+    "silent": true
+  },
   "regions": ["iad1"],
   "crons": [
     {
