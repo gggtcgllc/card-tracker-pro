@@ -2,42 +2,47 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
+interface CardResult {
+  id: string;
+  cardTitle: string;
+  price: number;
+  grade: string;
+  source: string;
+  saleDate: string;
+  url: string;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get('q') || '';
 
-  if (!query) {
+  if (!query.trim()) {
     return NextResponse.json({ results: [] });
   }
 
   try {
     const encodedQuery = encodeURIComponent(query);
-    const results: Array<{
-      id: string;
-      cardTitle: string;
-      price: number;
-      grade: string;
-      source: string;
-      saleDate: string;
-      url: string;
-    }> = [];
+    const results: CardResult[] = [];
 
     const ebayRssUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodedQuery}&LH_Sold=1&LH_Complete=1&_sop=13&_rss=1`;
     const res = await fetch(ebayRssUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       },
-      cache: 'no-store'
+      cache: 'no-store',
     });
 
     if (res.ok) {
       const xmlText = await res.text();
-      const items: string[] = xmlText.match(/<item>[\s\S]*?<\/item>/g) || [];
+      const rawMatches: RegExpMatchArray | null = xmlText.match(/<item>[\s\S]*?<\/item>/g);
+      const items: string[] = rawMatches ? Array.from(rawMatches) : [];
 
-      items.forEach((item: string, index: number) => {
-        const titleMatch = item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/) || item.match(/<title>(.*?)<\/title>/);
-        const linkMatch = item.match(/<link>(.*?)<\/link>/);
-        const descMatch = item.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/) || item.match(/<description>(.*?)<\/description>/);
+      for (let i = 0; i < items.length; i++) {
+        const itemStr: string = items[i];
+
+        const titleMatch = itemStr.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/) || itemStr.match(/<title>(.*?)<\/title>/);
+        const linkMatch = itemStr.match(/<link>(.*?)<\/link>/);
+        const descMatch = itemStr.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/) || itemStr.match(/<description>(.*?)<\/description>/);
 
         let price = 0;
         if (descMatch && descMatch[1]) {
@@ -58,26 +63,26 @@ export async function GET(request: NextRequest) {
 
         if (price > 0) {
           results.push({
-            id: `live-ebay-${index}-${Date.now()}`,
+            id: `live-ebay-${i}-${Date.now()}`,
             cardTitle: title,
             price: price,
             grade: grade,
             source: 'eBay',
             saleDate: new Date().toISOString(),
-            url: linkMatch && linkMatch[1] ? linkMatch[1] : '#'
+            url: linkMatch && linkMatch[1] ? linkMatch[1] : '#',
           });
         }
-      });
+      }
     }
 
     return NextResponse.json({
       success: true,
       query,
       count: results.length,
-      results
+      results,
     });
-  } catch (error: unknown) {
-    const errMessage = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ success: false, error: errMessage, results: [] }, { status: 200 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json({ success: false, error: message, results: [] }, { status: 200 });
   }
 }
