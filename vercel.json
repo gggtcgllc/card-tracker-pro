@@ -1,13 +1,8 @@
 {
-  "framework": "nextjs",
-  "buildCommand": "npm run build",
-  "devCommand": "npm run dev",
-  "installCommand": "npm install",
-  "regions": ["iad1"],
   "crons": [
     {
-      "path": "/api/cron/scrape",
-      "schedule": "*/15 * * * *"
+      "path": "/api/scraper",
+      "schedule": "0 6 * * *"
     }
   ]
 }
