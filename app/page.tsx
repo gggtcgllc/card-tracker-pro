@@ -22,6 +22,7 @@ const GRADE_COMPANIES = ['All', 'PSA', 'BGS', 'SGC', 'CGC', 'Ungraded'];
 
 const PLATFORM_META: Record<string, { short: string; dot: string }> = {
   'eBay':               { short: 'eBay',     dot: 'bg-red-500' },
+  'eBay Sold Comps':    { short: 'eBay Comps', dot: 'bg-red-500' },
   'Heritage Auctions':  { short: 'Heritage', dot: 'bg-purple-500' },
   'Goldin Auctions':    { short: 'Goldin',   dot: 'bg-yellow-500' },
   'PWCC Auctions':      { short: 'PWCC',     dot: 'bg-amber-500' },
@@ -53,9 +54,10 @@ function formatPriceFull(price: number): string {
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
+  if (isNaN(date.getTime())) return 'Recent';
   const now = new Date();
   const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) return 'Today';
+  if (diffDays <= 0) return 'Today';
   if (diffDays === 1) return 'Yesterday';
   if (diffDays < 7) return `${diffDays}d ago`;
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
@@ -99,28 +101,48 @@ export default function Home() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
 
-  const fetchListings = useCallback(async () => {
+  const fetchListings = useCallback(async (query = '') => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/listings');
+      let endpoint = '/api/listings';
+      if (query.trim()) {
+        endpoint = `/api/search?q=${encodeURIComponent(query.trim())}`;
+      }
+      
+      const res = await fetch(endpoint);
       if (!res.ok) throw new Error(`API ${res.status}`);
       const json = await res.json();
-      setListings(json.data ?? []);
+      
+      const rawData = json.results ?? json.data ?? [];
+      const formattedData: CardListing[] = rawData.map((item: any) => ({
+        id: item.id || `sale-${Math.random()}`,
+        cardTitle: item.cardTitle || item.title || 'Unknown Card',
+        price: Number(item.price) || 0,
+        grade: item.grade || null,
+        source: item.source || item.marketplace || 'eBay',
+        saleDate: item.saleDate || item.date || new Date().toISOString(),
+        url: item.url || '#'
+      }));
+
+      setListings(formattedData);
       setLastUpdated(new Date());
     } catch (err) {
       console.error(err);
-      setError('Failed to load data.');
+      setError('Failed to load card market data.');
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // Debounced real-time search trigger
   useEffect(() => {
-    fetchListings();
-    const t = setInterval(fetchListings, 60000);
-    return () => clearInterval(t);
-  }, [fetchListings]);
+    const timer = setTimeout(() => {
+      fetchListings(searchQuery);
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, fetchListings]);
 
   const enriched = useMemo(
     () => listings.map(l => ({ ...l, sport: sportFromTitle(l.cardTitle) })),
@@ -129,7 +151,6 @@ export default function Home() {
 
   const filtered = useMemo(() => {
     let r = [...enriched];
-    if (searchQuery) r = r.filter(l => l.cardTitle.toLowerCase().includes(searchQuery.toLowerCase()));
     if (sportFilter !== 'All') r = r.filter(l => l.sport === sportFilter);
     if (gradeFilter !== 'All') r = r.filter(l => gradeFilter === 'Ungraded' ? !l.grade || l.grade === 'Ungraded' : l.grade?.toUpperCase().includes(gradeFilter));
     if (sourceFilter !== 'All') r = r.filter(l => l.source === sourceFilter);
@@ -144,7 +165,7 @@ export default function Home() {
       return sortDir === 'desc' ? String(bv).localeCompare(String(av)) : String(av).localeCompare(String(bv));
     });
     return r;
-  }, [enriched, searchQuery, sportFilter, gradeFilter, sourceFilter, maxPrice, sortField, sortDir]);
+  }, [enriched, sportFilter, gradeFilter, sourceFilter, maxPrice, sortField, sortDir]);
 
   // Market stats
   const stats = useMemo(() => {
@@ -193,7 +214,7 @@ export default function Home() {
               </span>
             )}
             <button
-              onClick={fetchListings}
+              onClick={() => fetchListings(searchQuery)}
               disabled={loading}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded text-sm text-gray-300 transition-colors disabled:opacity-50"
             >
@@ -212,7 +233,7 @@ export default function Home() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-white">Live Card Market</h1>
           <p className="text-gray-400 text-sm mt-1">
-            Real verified sales from {Object.keys(PLATFORM_META).length} platforms · {listings.length} listings indexed
+            Real verified sales from {Object.keys(PLATFORM_META).length} platforms · {listings.length} sales found
           </p>
         </div>
 
@@ -262,7 +283,7 @@ export default function Home() {
                 </svg>
                 <input
                   type="text"
-                  placeholder="Search player, set, year..."
+                  placeholder="Search card, set, year (e.g. Pikachu Rising Rivals)..."
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   className="w-full bg-gray-800 border border-gray-700 rounded-md pl-9 pr-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
@@ -326,16 +347,16 @@ export default function Home() {
         {error ? (
           <div className="bg-gray-900 border border-red-800 rounded-lg p-8 text-center">
             <p className="text-red-400 mb-3">{error}</p>
-            <button onClick={fetchListings} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm transition-colors">Retry</button>
+            <button onClick={() => fetchListings(searchQuery)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm transition-colors">Retry</button>
           </div>
         ) : loading ? (
           <div className="bg-gray-900 border border-gray-800 rounded-lg p-16 text-center">
             <div className="inline-block w-10 h-10 rounded-full border-2 border-gray-700 border-t-blue-500 animate-spin mb-4" />
-            <p className="text-gray-400 text-sm">Loading market data from 18 platforms...</p>
+            <p className="text-gray-400 text-sm">Searching live card market comps...</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="bg-gray-900 border border-gray-800 rounded-lg p-16 text-center">
-            <p className="text-gray-400">No results match your filters.</p>
+            <p className="text-gray-400">No results found for &quot;{searchQuery}&quot;</p>
             <button
               onClick={() => { setSearchQuery(''); setSportFilter('All'); setGradeFilter('All'); setSourceFilter('All'); setMaxPrice(''); }}
               className="mt-3 text-sm text-blue-400 hover:underline"
