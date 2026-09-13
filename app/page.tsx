@@ -101,16 +101,11 @@ export default function Home() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
 
-  const fetchListings = useCallback(async (query = '') => {
+  const fetchListings = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      let endpoint = '/api/listings';
-      if (query.trim()) {
-        endpoint = `/api/search?q=${encodeURIComponent(query.trim())}`;
-      }
-      
-      const res = await fetch(endpoint);
+      const res = await fetch('/api/listings');
       if (!res.ok) throw new Error(`API ${res.status}`);
       const json = await res.json();
       
@@ -135,14 +130,10 @@ export default function Home() {
     }
   }, []);
 
-  // Debounced real-time search trigger
+  // Initial full-market load
   useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchListings(searchQuery);
-    }, 450);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery, fetchListings]);
+    fetchListings();
+  }, [fetchListings]);
 
   const enriched = useMemo(
     () => listings.map(l => ({ ...l, sport: sportFromTitle(l.cardTitle) })),
@@ -151,6 +142,14 @@ export default function Home() {
 
   const filtered = useMemo(() => {
     let r = [...enriched];
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      r = r.filter((l) =>
+        l.cardTitle.toLowerCase().includes(q) ||
+        l.source.toLowerCase().includes(q) ||
+        (l.grade ?? '').toLowerCase().includes(q)
+      );
+    }
     if (sportFilter !== 'All') r = r.filter(l => l.sport === sportFilter);
     if (gradeFilter !== 'All') r = r.filter(l => gradeFilter === 'Ungraded' ? !l.grade || l.grade === 'Ungraded' : l.grade?.toUpperCase().includes(gradeFilter));
     if (sourceFilter !== 'All') r = r.filter(l => l.source === sourceFilter);
@@ -165,7 +164,7 @@ export default function Home() {
       return sortDir === 'desc' ? String(bv).localeCompare(String(av)) : String(av).localeCompare(String(bv));
     });
     return r;
-  }, [enriched, sportFilter, gradeFilter, sourceFilter, maxPrice, sortField, sortDir]);
+  }, [enriched, searchQuery, sportFilter, gradeFilter, sourceFilter, maxPrice, sortField, sortDir]);
 
   // Market stats
   const stats = useMemo(() => {
@@ -214,7 +213,7 @@ export default function Home() {
               </span>
             )}
             <button
-              onClick={() => fetchListings(searchQuery)}
+              onClick={() => fetchListings()}
               disabled={loading}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded text-sm text-gray-300 transition-colors disabled:opacity-50"
             >
@@ -347,7 +346,7 @@ export default function Home() {
         {error ? (
           <div className="bg-gray-900 border border-red-800 rounded-lg p-8 text-center">
             <p className="text-red-400 mb-3">{error}</p>
-            <button onClick={() => fetchListings(searchQuery)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm transition-colors">Retry</button>
+            <button onClick={() => fetchListings()} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm transition-colors">Retry</button>
           </div>
         ) : loading ? (
           <div className="bg-gray-900 border border-gray-800 rounded-lg p-16 text-center">
